@@ -2,8 +2,7 @@ import json
 import logging
 import requests
 import os
-
-from restkit import Resource, BasicAuth
+from jira import JIRA
 
 from redash.destinations import *
 
@@ -33,7 +32,19 @@ class Jira(BaseDestination):
                 'assignee': {
                     'type': 'string',
                     'title': 'Assignee'
-                }
+                },
+                'username': {
+                    'type': 'string',
+                    'title': 'JIRA Username'
+                },
+                'password': {
+                    'type': 'string',
+                    'title': 'JIRA Password'
+                },
+                'server_url': {
+                    'type': 'string',
+                    'title': 'JIRA Server URL'
+                }              
             }
         }
 
@@ -42,49 +53,24 @@ class Jira(BaseDestination):
         return 'fa-jira'
 
     def notify(self, alert, query, user, new_state, app, host, options):
-
-        username = os.environ.get('USERNAME','')
-        password = os.environ.get('PASSWORD','')
-
-        auth = BasicAuth(username, password)
-
-        server_url = os.environ.get('SERVER_URL','')
-        resource_name = "issue"
-        complete_url = "%s/rest/api/latest/%s/" % (server_url, resource_name)
-        resource = Resource(complete_url, filters=[auth])
-        #create payload for JIRA
-
-        if options.get('project_name'): project = options.get('project_name')
-        if options.get('summary'): summary = options.get('summary')
-        if options.get('description'): description = options.get('description')
-        if options.get('priority'): priority = options.get('priority')
-        if options.get('assignee'): assignee = options.get('assignee')
-
-        data = {
-            "fields": {
-                "project": {
-                    "key": project
-                },
-                "summary": summary,
-                "description": description,
-                "issuetype": {
-                    "name": "Bug"
-                },
-                "priority": {
-                    "name": priority
-                },
-                "assignee": {
-                    "name": assignee
-                }
-            }
-        }
-
+            
         try:
-            response = resource.post(headers={'Content-Type': 'application/json'}, payload=json.dumps(data))
-            logging.warning(response.text)
-            if response.status_code != 200:
-                logging.error("JIRA send ERROR. status_code => {status}".format(status=response.status_code))
+            if options.get('project_name'): project = options.get('project_name')
+            if options.get('summary'): summary = options.get('summary')
+            if options.get('description'): description = options.get('description')
+            if options.get('priority'): priority = options.get('priority')
+            if options.get('assignee'): assignee = options.get('assignee')
+            if options.get('username'): username = options.get('username')
+            if options.get('password'): password = options.get('password')
+            if options.get('server_url'): server_url = options.get('server_url')
         except Exception:
-            logging.exception("JIRA send ERROR.")
+            logging.exception("Failed to get the inputs {0},{1},{2},{3},{4}".format(project,summary,description,priority,assignee))
+            
+        try:
+            authed_jira = JIRA(server_url, basic_auth=(username, password))
+            create_issue = authed_jira.create_issue(project=project, summary=summary,description=description, issuetype={'name': 'Bug'},assignee={'name':assignee}, priority={'name':priority})
+            logging.error('JIRA created {0}'.format(create_issue))
+        except Exception:
+            logging.exception("JIRA create ERROR.")
 
 register(Jira)
